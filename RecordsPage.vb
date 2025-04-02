@@ -1,4 +1,4 @@
-﻿Imports MySql.Data.MySqlClient
+Imports MySql.Data.MySqlClient
 Imports System.IO
 Imports System.Drawing.Printing
 
@@ -6,11 +6,13 @@ Public Class RecordsPage
     Dim connection As MySqlConnection
     Dim command As MySqlCommand
     Private selectedClientID As Integer
+    Private currentPage As Integer ' Add this variable
 
     ' Constructor to accept the ClientID
     Public Sub New(clientID As Integer)
         InitializeComponent() ' Load form elements
         Me.selectedClientID = clientID
+        currentPage = 0 ' Initialize the current page
     End Sub
 
     Private Sub Records_Load(sender As Object, e As EventArgs) Handles MyBase.Load
@@ -25,16 +27,16 @@ Public Class RecordsPage
 
             ' Corrected Query: Filter by ClientID instead of FullName
             Dim query As String = "SELECT pi.PetID, pi.Name, pi.Sex, pi.Birthday, pi.Type, pi.Breed, pi.Color, 
-                                          ps.SurgeryType, ps.SurgeryDate, d.DewormingName, pd.DewormingDate, 
-                                          v.VaccineName, pv.VaccinationDate
-                                   FROM pets_info pi 
-                                   LEFT JOIN petsurgeries ps ON pi.PetID = ps.PetID 
-                                   LEFT JOIN petdewormings pd ON pi.PetID = pd.PetID 
-                                   LEFT JOIN dewormings d ON pd.DewormingID = d.DewormingID
-                                   LEFT JOIN petvaccinations pv ON pi.PetID = pv.PetID 
-                                   LEFT JOIN vaccines v ON pv.VaccineID = v.VaccineID 
-                                   INNER JOIN clients c ON pi.ClientID = c.ClientID 
-                                   WHERE c.ClientID = @ClientID;"
+                                           ps.SurgeryType, ps.SurgeryDate, d.DewormingName, pd.DewormingDate, 
+                                           v.VaccineName, pv.VaccinationDate
+                                    FROM pets_info pi 
+                                    LEFT JOIN petsurgeries ps ON pi.PetID = ps.PetID 
+                                    LEFT JOIN petdewormings pd ON pi.PetID = pd.PetID 
+                                    LEFT JOIN dewormings d ON pd.DewormingID = d.DewormingID
+                                    LEFT JOIN petvaccinations pv ON pi.PetID = pv.PetID 
+                                    LEFT JOIN vaccines v ON pv.VaccineID = v.VaccineID 
+                                    INNER JOIN clients c ON pi.ClientID = c.ClientID 
+                                    WHERE c.ClientID = @ClientID;"
 
             Dim command As New MySqlCommand(query, connection)
             command.Parameters.AddWithValue("@ClientID", selectedClientID)
@@ -143,22 +145,23 @@ Public Class RecordsPage
         Try
             connection.Open()
             Dim query As String = "SELECT pi.PetID, pi.Name, pi.Sex, pi.Birthday, pi.Type, pi.Breed, pi.Color, 
-                                       GROUP_CONCAT(DISTINCT CONCAT(v.VaccineName, ' (', pv.VaccinationDate, ')') SEPARATOR ', ') AS Vaccines, 
-                                       GROUP_CONCAT(DISTINCT CONCAT(d.DewormingName, ' (', pd.DewormingDate, ')') SEPARATOR ', ') AS Dewormings, 
-                                       GROUP_CONCAT(DISTINCT CONCAT(ps.SurgeryType, ' (', ps.SurgeryDate, ')') SEPARATOR ', ') AS Surgeries,
-                                       c.FullName, c.Sex AS OwnerSex, c.Phone, c.Address, c.Email 
-                                FROM pets_info pi 
-                                LEFT JOIN petvaccinations pv ON pi.PetID = pv.PetID 
-                                LEFT JOIN vaccines v ON pv.VaccineID = v.VaccineID 
-                                LEFT JOIN petdewormings pd ON pi.PetID = pd.PetID 
-                                LEFT JOIN dewormings d ON pd.DewormingID = d.DewormingID 
-                                LEFT JOIN petsurgeries ps ON pi.PetID = ps.PetID
-                                INNER JOIN clients c ON pi.ClientID = c.ClientID 
-                                WHERE c.ClientID = @ClientID 
-                                GROUP BY pi.PetID;"
-
+                                        GROUP_CONCAT(DISTINCT CONCAT(v.VaccineName, ' (', pv.VaccinationDate, ')') SEPARATOR ', ') AS Vaccines, 
+                                        GROUP_CONCAT(DISTINCT CONCAT(d.DewormingName, ' (', pd.DewormingDate, ')') SEPARATOR ', ') AS Dewormings, 
+                                        GROUP_CONCAT(DISTINCT CONCAT(ps.SurgeryType, ' (', ps.SurgeryDate, ')') SEPARATOR ', ') AS Surgeries,
+                                        c.FullName, c.Sex AS OwnerSex, c.Phone, c.Address, c.Email 
+                                 FROM pets_info pi 
+                                 LEFT JOIN petvaccinations pv ON pi.PetID = pv.PetID 
+                                 LEFT JOIN vaccines v ON pv.VaccineID = v.VaccineID 
+                                 LEFT JOIN petdewormings pd ON pi.PetID = pd.PetID 
+                                 LEFT JOIN dewormings d ON pd.DewormingID = d.DewormingID 
+                                 LEFT JOIN petsurgeries ps ON pi.PetID = ps.PetID
+                                 INNER JOIN clients c ON pi.ClientID = c.ClientID 
+                                 WHERE c.ClientID = @ClientID
+                                 GROUP BY pi.PetID
+                                 LIMIT @Page, 1;" ' Fetch one pet per page
             Dim cmd As New MySqlCommand(query, connection)
             cmd.Parameters.AddWithValue("@ClientID", selectedClientID)
+            cmd.Parameters.AddWithValue("@Page", currentPage)
             Dim reader As MySqlDataReader = cmd.ExecuteReader()
 
             If reader.Read() Then
@@ -178,7 +181,6 @@ Public Class RecordsPage
                 ownerAddress = reader("Address").ToString()
                 ownerEmail = reader("Email").ToString()
             End If
-
             reader.Close()
         Catch ex As MySqlException
             MessageBox.Show("SQL Error: " & ex.Message, "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -223,6 +225,21 @@ Public Class RecordsPage
         e.Graphics.DrawString("Address: " & ownerAddress, fontBody, brush, startX, startY)
         startY += lineSpacing
         e.Graphics.DrawString("Email: " & ownerEmail, fontBody, brush, startX, startY)
+
+        ' Check if there are more pages to print
+        connection.Open()
+        Dim cmdCount As New MySqlCommand("SELECT COUNT(*) FROM pets_info WHERE ClientID = @ClientID", connection)
+        cmdCount.Parameters.AddWithValue("@ClientID", selectedClientID)
+        Dim petCount As Integer = Convert.ToInt32(cmdCount.ExecuteScalar())
+        connection.Close()
+
+        currentPage += 1
+        If currentPage < petCount Then
+            e.HasMorePages = True
+        Else
+            e.HasMorePages = False
+            currentPage = 0 ' Reset for the next print job
+        End If
     End Sub
 
     Private Sub BtnBack_Click(sender As Object, e As EventArgs) Handles BtnBack.Click
