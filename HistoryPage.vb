@@ -1,4 +1,4 @@
-﻿Imports System.Drawing.Printing
+Imports System.Drawing.Printing
 Imports MySql.Data.MySqlClient
 
 Public Class HistoryPage
@@ -58,11 +58,9 @@ Public Class HistoryPage
     End Sub
 
     Private Sub BtnPrint_Click(sender As Object, e As EventArgs) Handles BtnPrint.Click
-        PrintDocument1.Print()
         PrintPreviewDialog1.Document = PrintDocument1
         PrintPreviewDialog1.WindowState = FormWindowState.Maximized
         PrintPreviewDialog1.ShowDialog()
-
     End Sub
 
     Private Sub PrintDocument1_PrintPage(sender As Object, e As PrintPageEventArgs) Handles PrintDocument1.PrintPage
@@ -75,6 +73,7 @@ Public Class HistoryPage
         Dim yPos As Integer = 50
         Dim xPos As Integer = 50
         Dim logoPath As String = "C:\Users\joanna\source\repos\PETMALU\PetMalu_Records_System\Image\petmalu logo.png"
+        Static rowIndex As Integer = 0
 
         Try
             ' Draw Logo
@@ -106,17 +105,29 @@ Public Class HistoryPage
             yPos += 30 ' Move to the next row
 
             ' Fetch Data from DataGridView
-            For Each row As DataGridViewRow In DataGridView1.Rows
-                If row.Index = DataGridView1.Rows.Count - 1 Then Exit For ' Avoid empty last row
-
+            While rowIndex < DataGridView1.Rows.Count - 1
                 xOffset = xPos
                 For i As Integer = 0 To headers.Length - 1
-                    Dim value As String = row.Cells(i).Value.ToString()
+                    Dim value As String = DataGridView1.Rows(rowIndex).Cells(i).Value.ToString()
                     eGraphics.DrawString(value, fontContent, brush, xOffset, yPos)
                     xOffset += columnWidths(i)
                 Next
                 yPos += 25 ' Move to the next row
-            Next
+
+                ' Check if the next row will fit on the page
+                If yPos + 25 > e.MarginBounds.Bottom Then
+                    e.HasMorePages = True
+                    rowIndex += 1 ' Continue from next row on the next page
+                    Exit Sub
+                End If
+
+                rowIndex += 1
+            End While
+
+            ' If all rows are printed, indicate that there are no more pages
+            e.HasMorePages = False
+            rowIndex = 0 ' Reset rowIndex for next print job
+
         Catch ex As Exception
             MessageBox.Show("Error in printing: " & ex.Message, "Print Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
